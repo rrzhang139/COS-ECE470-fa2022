@@ -1,8 +1,10 @@
-use serde::{Serialize, Deserialize};
+use ring::digest;
+use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 
 // 20-byte address
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
-pub struct Address([u8; 20]);
+pub struct Address(pub [u8; 20]);
 
 impl std::convert::From<&[u8; 20]> for Address {
     fn from(input: &[u8; 20]) -> Address {
@@ -48,7 +50,11 @@ impl std::fmt::Debug for Address {
 
 impl Address {
     pub fn from_public_key_bytes(bytes: &[u8]) -> Address {
-        unimplemented!()
+        Address(
+            digest::digest(&digest::SHA256, bytes).as_ref()[bytes.len() - 20..]
+                .try_into()
+                .unwrap(),
+        )
     }
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST

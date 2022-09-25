@@ -1,0 +1,10 @@
+/Users/qianjing/COS-ECE470-fa2022/target/debug/deps/futures_channel-c49b75689fc7c206.rmeta: /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/lib.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/lock.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/mod.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/queue.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/sink_impl.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/oneshot.rs
+
+/Users/qianjing/COS-ECE470-fa2022/target/debug/deps/futures_channel-c49b75689fc7c206.d: /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/lib.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/lock.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/mod.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/queue.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/sink_impl.rs /Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/oneshot.rs
+
+/Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/lib.rs:
+/Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/lock.rs:
+/Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/mod.rs:
+/Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/queue.rs:
+/Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/mpsc/sink_impl.rs:
+/Users/qianjing/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-channel-0.3.18/src/oneshot.rs:

@@ -1,28 +1,68 @@
-use serde::{Serialize,Deserialize};
-use ring::signature::{Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
+use crate::types::address::Address;
 use rand::Rng;
+use ring::{
+    error::Unspecified,
+    signature::{Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm},
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
+    sender: Address,
+    receiver: Address,
+    value: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SignedTransaction {
+    transaction: Transaction,
+    signature: Vec<u8>,
+    public_key: Vec<u8>,
 }
 
 /// Create digital signature of a transaction
 pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
-    unimplemented!()
+    let sender = t.sender.0.as_ref();
+    let receiver = t.receiver.0.as_ref();
+    let tx_array = [&sender[..], &receiver[..], &[t.value]].concat();
+    key.sign(&tx_array[..])
 }
 
 /// Verify digital signature of a transaction, using public key instead of secret key
 pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
-    unimplemented!()
+    // create tx message byte array
+    let sender = t.sender.0.as_ref();
+    let receiver = t.receiver.0.as_ref();
+    let tx_array = [&sender[..], &receiver[..], &[t.value]].concat();
+
+    let pk_vector: Vec<u8> = public_key.as_ref().to_vec();
+    let signature_vector: Vec<u8> = signature.as_ref().to_vec();
+    let a = EdDSAParameters {};
+    let result = VerificationAlgorithm::verify(
+        &a,
+        untrusted::Input::from(&pk_vector[..]),
+        untrusted::Input::from(&tx_array[..]),
+        untrusted::Input::from(&signature_vector[..]),
+    );
+    match result {
+        Ok(()) => true,
+        Err(Unspecified) => false,
+    }
 }
 
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_transaction() -> Transaction {
-    unimplemented!()
+    let mut rng = rand::thread_rng();
+    let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+    let random_bytes1: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+
+    let sender_addr = Address::from_public_key_bytes(&random_bytes);
+    let receiver_addr = Address::from_public_key_bytes(&random_bytes1);
+    Transaction {
+        sender: sender_addr,
+        receiver: receiver_addr,
+        value: 0,
+    }
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
@@ -32,7 +72,6 @@ mod tests {
     use super::*;
     use crate::types::key_pair;
     use ring::signature::KeyPair;
-
 
     #[test]
     fn sign_verify() {
