@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
-use std::convert::TryInto;
 #[cfg(any(test, test_utilities))]
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 
 /// An object that can be meaningfully hashed.
 pub trait Hashable {

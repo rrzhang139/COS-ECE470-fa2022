@@ -3,15 +3,21 @@ pub mod worker;
 use log::info;
 
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::time;
 
 use std::thread;
 
+use crate::blockchain::Blockchain;
 use crate::types::block::Block;
+use crate::types::block::Header;
+use crate::types::hash::Hashable;
+use crate::types::merkle::MerkleTree;
+use crate::types::transaction::SignedTransaction;
 
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
-    Update, // update the block in mining, it may due to new blockchain tip or new transaction
+    Update,     // update the block in mining, it may due to new blockchain tip or new transaction
     Exit,
 }
 
@@ -26,6 +32,7 @@ pub struct Context {
     control_chan: Receiver<ControlSignal>,
     operating_state: OperatingState,
     finished_block_chan: Sender<Block>,
+    blockchain: Arc<Mutex<Blockchain>>,
 }
 
 #[derive(Clone)]
@@ -34,7 +41,7 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new() -> (Context, Handle, Receiver<Block>) {
+pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
 
@@ -42,6 +49,7 @@ pub fn new() -> (Context, Handle, Receiver<Block>) {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
+        blockchain: Arc::clone(blockchain),
     };
 
     let handle = Handle {
@@ -51,9 +59,11 @@ pub fn new() -> (Context, Handle, Receiver<Block>) {
     (ctx, handle, finished_block_receiver)
 }
 
-#[cfg(any(test,test_utilities))]
+#[cfg(any(test, test_utilities))]
 fn test_new() -> (Context, Handle, Receiver<Block>) {
-    new()
+    let blockchain = Blockchain::new();
+    let blockchain = Arc::new(Mutex::new(blockchain));
+    new(&blockchain)
 }
 
 impl Handle {
@@ -132,8 +142,32 @@ impl Context {
                 return;
             }
 
-            // TODO for student: actual mining, create a block
-            // TODO for student: if block mining finished, you can have something like: self.finished_block_chan.send(block.clone()).expect("Send finished block error");
+            // actual mining, create a block
+            use std::time::SystemTime;
+            let mut chain_unwrapped = self.blockchain.lock().unwrap(); // acquire the lock and access the struct
+            let latest_block_hash = chain_unwrapped.tip();
+            // eprintln!("LATEST BLOCK HASH, {:?}", latest_block_hash);
+            let latest_block = &chain_unwrapped.block_map[&latest_block_hash];
+            let transactions: Vec<SignedTransaction> = Vec::new();
+            let merkle_tree = MerkleTree::new(&transactions);
+            let header = Header {
+                parent: latest_block_hash,
+                nonce: latest_block.header.nonce + 1, // does not matter, because we hash and it produces random chances of solving puzzle
+                difficulty: latest_block.get_difficulty(),
+                timestamp: SystemTime::now().elapsed().unwrap().subsec_millis(),
+                merkle_root: merkle_tree.root(),
+            };
+            let new_block = Block {
+                header,
+                data: transactions,
+            };
+            chain_unwrapped.insert(&new_block);
+
+            if new_block.hash() <= new_block.get_difficulty() {
+                self.finished_block_chan
+                    .send(new_block)
+                    .expect("Send finished block error");
+            }
 
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
@@ -149,8 +183,8 @@ impl Context {
 
 #[cfg(test)]
 mod test {
-    use ntest::timeout;
     use crate::types::hash::Hashable;
+    use ntest::timeout;
 
     #[test]
     #[timeout(60000)]
