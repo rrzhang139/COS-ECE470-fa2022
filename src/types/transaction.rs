@@ -1,4 +1,8 @@
-use crate::types::address::Address;
+use core::time;
+use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, thread};
+
+use crate::{network::message, types::address::Address};
 use rand::Rng;
 use ring::{
     digest,
@@ -9,18 +13,88 @@ use serde::{Deserialize, Serialize};
 
 use super::hash::{Hashable, H256};
 
+use crate::network::server::Handle as NetworkServerHandle;
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct Mempool {
+    pub tx_map: HashMap<H256, SignedTransaction>,
+}
+
+impl Mempool {
+    pub fn new() -> Self {
+        let tx_map = HashMap::new();
+        Mempool { tx_map }
+    }
+
+    pub fn insert(&mut self, tx: &SignedTransaction) {
+        // insert a tx in mempool
+        let tx_hash = tx.hash();
+        if !self.tx_map.contains_key(&tx_hash) {
+            self.tx_map.insert(tx_hash.clone(), tx.clone());
+        }
+    }
+
+    pub fn remove(&mut self, tx: &SignedTransaction) {
+        // remove a tx from the mempool
+        let tx_hash = tx.hash();
+        if !self.tx_map.contains_key(&tx_hash) {
+            self.tx_map.remove(&tx_hash);
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
-    sender: Address,
-    receiver: Address,
-    value: u8,
+    pub sender: Address,
+    pub receiver: Address,
+    pub value: u8,
+}
+
+pub struct TransactionGenerator {}
+
+impl TransactionGenerator {
+    pub fn start(theta: u64, network: NetworkServerHandle, mempool: Arc<Mutex<Mempool>>) {
+        use crate::types::key_pair;
+        thread::spawn(move || loop {
+            let mut rng = rand::thread_rng();
+            let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+            let random_bytes1: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+            let sender_addr = Address::from_public_key_bytes(&random_bytes);
+            let receiver_addr = Address::from_public_key_bytes(&random_bytes1);
+            let transaction = Transaction {
+                sender: sender_addr,
+                receiver: receiver_addr,
+                value: 10,
+            };
+            let key = key_pair::random();
+            let signature = sign(&transaction, &key).as_ref().to_vec();
+            let public_key = key.public_key().as_ref().to_vec();
+            let signed_tx = SignedTransaction {
+                public_key,
+                signature,
+                transaction,
+            };
+            // add tx to mempool
+            let mut unwrapped_mempool = mempool.lock().unwrap();
+            unwrapped_mempool.insert(&signed_tx);
+            drop(unwrapped_mempool);
+            // broadcast the tx hash to network
+            network.broadcast(message::Message::NewTransactionHashes(vec![
+                signed_tx.hash()
+            ]));
+            if theta != 0 {
+                let interval = time::Duration::from_micros(theta as u64);
+                thread::sleep(interval);
+            }
+        });
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SignedTransaction {
-    transaction: Transaction,
-    signature: Vec<u8>,
-    public_key: Vec<u8>,
+    pub transaction: Transaction,
+    pub signature: Vec<u8>,
+    pub public_key: Vec<u8>,
 }
 
 impl Hashable for SignedTransaction {

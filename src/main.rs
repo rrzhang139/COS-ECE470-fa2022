@@ -19,6 +19,7 @@ use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
+use types::transaction::Mempool;
 
 fn main() {
     // parse command line arguments
@@ -38,6 +39,8 @@ fn main() {
     stderrlog::new().verbosity(verbosity).init().unwrap();
     let blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(blockchain));
+    let mempool = Mempool::new();
+    let mempool = Arc::new(Mutex::new(mempool));
     // parse p2p server address
     let p2p_addr = matches
         .value_of("peer_addr")
@@ -75,12 +78,18 @@ fn main() {
             process::exit(1);
         });
     let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
-    let worker_ctx =
-        network::worker::Worker::new(p2p_workers, msg_rx, &server, &blockchain, &orphan_buffer);
+    let worker_ctx = network::worker::Worker::new(
+        p2p_workers,
+        msg_rx,
+        &server,
+        &blockchain,
+        &mempool,
+        &orphan_buffer,
+    );
     worker_ctx.start();
 
     // start the miner
-    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain);
+    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain, &mempool);
     let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan, &blockchain);
     miner_ctx.start();
     miner_worker_ctx.start();
@@ -119,7 +128,7 @@ fn main() {
     }
 
     // start the API server
-    ApiServer::start(api_addr, &miner, &server, &blockchain);
+    ApiServer::start(api_addr, &miner, &server, &blockchain, &mempool);
 
     loop {
         std::thread::park();

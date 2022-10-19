@@ -4,6 +4,7 @@ use super::server::Handle as ServerHandle;
 use crate::blockchain::{self, Blockchain};
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
+use crate::types::transaction::{verify, Mempool};
 
 use log::{debug, error, warn};
 
@@ -21,6 +22,7 @@ pub struct Worker {
     num_worker: usize,
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
+    mempool: Arc<Mutex<Mempool>>,
     orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
 }
 
@@ -30,6 +32,7 @@ impl Worker {
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
+        mempool: &Arc<Mutex<Mempool>>,
         orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>,
     ) -> Self {
         Self {
@@ -38,6 +41,7 @@ impl Worker {
             server: server.clone(),
             blockchain: Arc::clone(blockchain),
             orphan_buffer: Arc::clone(orphan_buffer),
+            mempool: Arc::clone(mempool),
         }
     }
 
@@ -63,6 +67,7 @@ impl Worker {
             let (msg, mut peer) = msg;
             let msg: Message = bincode::deserialize(&msg).unwrap();
             let mut chain_unwrapped = self.blockchain.lock().unwrap();
+            let mut mempool_unwrapped = self.mempool.lock().unwrap();
             match msg {
                 Message::Ping(nonce) => {
                     debug!("Ping: {}", nonce);
@@ -141,6 +146,41 @@ impl Worker {
                         self.server.broadcast(Message::NewBlockHashes(new_blocks));
                     }
                 }
+                Message::NewTransactionHashes(hashes) => {
+                    let mut new_txs = Vec::new();
+                    for hash in hashes.clone() {
+                        if !mempool_unwrapped.tx_map.contains_key(&hash) {
+                            // if no block contains this hash, then we ask by sending GetBlocks
+                            new_txs.push(hash);
+                        }
+                    }
+                    peer.write(Message::GetTransactions(new_txs));
+                }
+                Message::GetTransactions(hashes) => {
+                    let mut txs_ready_for_mempool = Vec::new();
+                    for hash in hashes.clone() {
+                        if mempool_unwrapped.tx_map.contains_key(&hash) {
+                            let tx = mempool_unwrapped.tx_map[&hash].clone();
+                            txs_ready_for_mempool.push(tx);
+                        }
+                    }
+                    peer.write(Message::Transactions(txs_ready_for_mempool));
+                }
+                Message::Transactions(txs) => {
+                    for signed_tx in txs.clone() {
+                        let transaction = &signed_tx.transaction;
+                        let pub_key = &signed_tx.public_key;
+                        let signature = &signed_tx.signature;
+                        let sender_pub_key = &transaction.sender.0;
+                        if verify(&transaction, &pub_key, &signature) && pub_key == sender_pub_key {
+                            self.server
+                                .broadcast(Message::NewTransactionHashes(vec![signed_tx
+                                    .hash()
+                                    .clone()]));
+                            mempool_unwrapped.insert(&signed_tx);
+                        }
+                    }
+                }
                 _ => unimplemented!(),
             }
         }
@@ -175,9 +215,11 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
     let blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(blockchain));
+    let mempool = Mempool::new();
+    let mempool = Arc::new(Mutex::new(mempool));
     let chain_unwrapped = blockchain.lock().unwrap();
     let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
-    let worker = Worker::new(1, msg_chan, &server, &blockchain, &orphan_buffer);
+    let worker = Worker::new(1, msg_chan, &server, &blockchain, &mempool, &orphan_buffer);
     worker.start();
     (
         test_msg_sender,
